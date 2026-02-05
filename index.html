@@ -696,5 +696,778 @@
             if (btn) btn.click();
         };
     </script>
+    <style>
+    /* CSS cho giao diện Admin */
+    #admin-login-btn { position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: #333; color: #fff; padding: 10px 20px; border-radius: 5px; cursor: pointer; border: none; }
+    #admin-panel { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10000; overflow-y: auto; padding: 20px; box-sizing: border-box; }
+    .admin-container { background: #fff; max-width: 800px; margin: 50px auto; padding: 30px; border-radius: 8px; position: relative; }
+    .close-admin { position: absolute; top: 10px; right: 10px; font-size: 24px; cursor: pointer; color: red; font-weight: bold; }
+    .admin-tab { margin-bottom: 20px; border-bottom: 2px solid #ddd; }
+    .admin-tab button { padding: 10px 20px; border: none; background: #eee; cursor: pointer; margin-right: 5px; }
+    .admin-tab button.active { background: #f7a8b8; color: #fff; font-weight: bold; }
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+    .form-group input, .form-group textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+    .btn-save { background: #28a745; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; width: 100%; margin-top: 10px; }
+    .btn-delete { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-top: 5px;}
+    
+    /* CSS hiển thị bài viết mới trên trang */
+    #dynamic-news-section { padding: 40px 0; background: #f9f9f9; }
+    .news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+    .news-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .news-card h3 { margin-top: 0; color: #333; }
+    .news-card small { color: #888; }
+</style>
+
+<button id="admin-login-btn" onclick="openAdminLogin()">Admin Login</button>
+
+<div id="admin-panel">
+    <div class="admin-container">
+        <span class="close-admin" onclick="document.getElementById('admin-panel').style.display='none'">×</span>
+        <h2>Quản trị Website</h2>
+        
+        <div class="admin-tab">
+            <button class="tab-btn active" onclick="switchTab('tab-posts')">Đăng Bài Viết</button>
+            <button class="tab-btn" onclick="switchTab('tab-team')">Thêm Nhân Sự</button>
+        </div>
+
+        <div id="tab-posts" class="tab-content">
+            <h3>Đăng Tin Tức Mới</h3>
+            <div class="form-group">
+                <label>Tiêu đề bài viết</label>
+                <input type="text" id="post-title" placeholder="Nhập tiêu đề...">
+            </div>
+            <div class="form-group">
+                <label>Nội dung</label>
+                <textarea id="post-content" rows="5" placeholder="Nhập nội dung..."></textarea>
+            </div>
+            <button class="btn-save" onclick="savePost()">Đăng Bài</button>
+            <hr>
+            <h4>Danh sách bài đã đăng</h4>
+            <div id="admin-post-list"></div>
+        </div>
+
+        <div id="tab-team" class="tab-content" style="display:none;">
+            <h3>Thêm Thành Viên Team</h3>
+            <div class="form-group">
+                <label>Tên thành viên</label>
+                <input type="text" id="team-name">
+            </div>
+            <div class="form-group">
+                <label>Chức vụ (Role)</label>
+                <input type="text" id="team-role">
+            </div>
+            <div class="form-group">
+                <label>Mô tả chi tiết</label>
+                <textarea id="team-desc" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Ảnh đại diện</label>
+                <input type="file" id="team-img" accept="image/*">
+            </div>
+            <button class="btn-save" onclick="saveTeamMember()">Lưu Nhân Sự</button>
+            <hr>
+            <h4>Danh sách nhân sự (đã thêm)</h4>
+            <div id="admin-team-list"></div>
+        </div>
+    </div>
+</div>
+
+<div id="news-placeholder"></div>
+
+<script>
+    // 1. CẤU HÌNH & KHỞI TẠO
+    const STORAGE_KEY_POSTS = 'nanu_posts';
+    const STORAGE_KEY_TEAM = 'nanu_team';
+
+    // Chèn khu vực tin tức vào sau phần giới thiệu (Section 10)
+    const newsSectionHTML = `
+        <section id="dynamic-news-section">
+            <div class="w-container">
+                <h1 class="heading-9">TIN TỨC MỚI</h1>
+                <div id="public-news-list" class="news-grid"></div>
+            </div>
+        </section>
+    `;
+    // Chèn section tin tức vào sau section đầu tiên
+    document.querySelector('.section-10').insertAdjacentHTML('afterend', newsSectionHTML);
+
+    // 2. CHỨC NĂNG ĐĂNG NHẬP
+    function openAdminLogin() {
+        let tk = prompt("Nhập tài khoản:");
+        let mk = prompt("Nhập mật khẩu:");
+        
+        if (tk === 'admin' && mk === '1') {
+            alert("Đăng nhập thành công!");
+            document.getElementById('admin-panel').style.display = 'block';
+            loadAdminData();
+        } else {
+            alert("Sai thông tin đăng nhập!");
+        }
+    }
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+        document.getElementById(tabId).style.display = 'block';
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+    }
+
+    // 3. XỬ LÝ BÀI VIẾT (POSTS)
+    function savePost() {
+        const title = document.getElementById('post-title').value;
+        const content = document.getElementById('post-content').value;
+        if(!title) return alert("Vui lòng nhập tiêu đề");
+
+        const newPost = {
+            id: Date.now(),
+            title: title,
+            content: content,
+            date: new Date().toLocaleDateString()
+        };
+
+        let posts = JSON.parse(localStorage.getItem(STORAGE_KEY_POSTS) || '[]');
+        posts.unshift(newPost); // Thêm vào đầu
+        localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(posts));
+        
+        alert("Đã đăng bài!");
+        document.getElementById('post-title').value = '';
+        document.getElementById('post-content').value = '';
+        renderPublicPosts();
+        loadAdminData();
+    }
+
+    function deletePost(id) {
+        if(confirm("Xóa bài này?")) {
+            let posts = JSON.parse(localStorage.getItem(STORAGE_KEY_POSTS) || '[]');
+            posts = posts.filter(p => p.id != id);
+            localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(posts));
+            renderPublicPosts();
+            loadAdminData();
+        }
+    }
+
+    function renderPublicPosts() {
+        const container = document.getElementById('public-news-list');
+        const posts = JSON.parse(localStorage.getItem(STORAGE_KEY_POSTS) || '[]');
+        
+        if(posts.length === 0) {
+            document.getElementById('dynamic-news-section').style.display = 'none';
+        } else {
+            document.getElementById('dynamic-news-section').style.display = 'block';
+            container.innerHTML = posts.map(p => `
+                <div class="news-card">
+                    <h3>${p.title}</h3>
+                    <small>${p.date}</small>
+                    <p>${p.content}</p>
+                </div>
+            `).join('');
+        }
+    }
+
+    // 4. XỬ LÝ NHÂN SỰ (TEAM)
+    function saveTeamMember() {
+        const name = document.getElementById('team-name').value;
+        const role = document.getElementById('team-role').value;
+        const desc = document.getElementById('team-desc').value;
+        const fileInput = document.getElementById('team-img');
+        
+        if(!name) return alert("Cần nhập tên!");
+
+        // Hàm xử lý ảnh sang Base64 để lưu vào localStorage
+        if (fileInput.files && fileInput.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imgSrc = e.target.result;
+                addMemberToStorage(name, role, desc, imgSrc);
+            };
+            reader.readAsDataURL(fileInput.files[0]);
+        } else {
+            // Dùng ảnh mặc định nếu không upload
+            addMemberToStorage(name, role, desc, "https://via.placeholder.com/150");
+        }
+    }
+
+    function addMemberToStorage(name, role, desc, img) {
+        const newMember = { id: Date.now(), name, role, desc, img };
+        let team = JSON.parse(localStorage.getItem(STORAGE_KEY_TEAM) || '[]');
+        team.push(newMember);
+        localStorage.setItem(STORAGE_KEY_TEAM, JSON.stringify(team));
+        
+        alert("Đã thêm thành viên!");
+        renderPublicTeam();
+        loadAdminData();
+    }
+
+    function deleteMember(id) {
+        if(confirm("Xóa thành viên này?")) {
+            let team = JSON.parse(localStorage.getItem(STORAGE_KEY_TEAM) || '[]');
+            team = team.filter(t => t.id != id);
+            localStorage.setItem(STORAGE_KEY_TEAM, JSON.stringify(team));
+            renderPublicTeam();
+            loadAdminData();
+        }
+    }
+
+    function renderPublicTeam() {
+        // Tìm vùng hiển thị Team trong HTML gốc
+        const teamContainer = document.querySelector('.team-member-wrap .team-grid');
+        if(!teamContainer) return;
+
+        // Lấy dữ liệu mới
+        const team = JSON.parse(localStorage.getItem(STORAGE_KEY_TEAM) || '[]');
+        
+        // Giữ lại các thành viên cũ (hardcode trong HTML) hoặc xóa đi tùy bạn.
+        // Ở đây tôi sẽ giữ thẻ gốc và thêm thẻ mới vào sau.
+        
+        // Tạo HTML cho các thành viên mới thêm
+        const newMembersHTML = team.map(m => `
+            <div class="card" id="member-${m.id}">
+                <div class="author-avatar">
+                    <img src="${m.img}" loading="lazy" class="avatar-image" style="width:100%; height:100%; object-fit:cover;">
+                </div>
+                <h1 class="name">${m.name}</h1>
+                <div class="role">${m.role}</div>
+                <div class="text-block-21">${m.desc.replace(/\n/g, '<br>')}</div>
+            </div>
+        `).join('');
+
+        // Cách đơn giản: Xóa các phần tử JS đã thêm trước đó để tránh trùng lặp
+        // (Lưu ý: Cách này chỉ append vào cuối danh sách hiện có)
+        // Trong thực tế, bạn nên có một container riêng cho "Dynamic Team"
+        
+        // Tìm các card cũ được thêm bằng JS và xóa đi để render lại
+        const oldDynamicCards = document.querySelectorAll('.dynamic-team-card');
+        oldDynamicCards.forEach(c => c.remove());
+
+        // Append HTML mới
+        if(team.length > 0) {
+             // Chèn thêm vào cuối grid
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = newMembersHTML;
+            while (tempDiv.firstChild) {
+                if(tempDiv.firstChild.classList) {
+                    tempDiv.firstChild.classList.add('dynamic-team-card'); // Đánh dấu để dễ quản lý
+                    teamContainer.appendChild(tempDiv.firstChild);
+                } else {
+                    tempDiv.removeChild(tempDiv.firstChild);
+                }
+            }
+        }
+    }
+
+    // 5. CẬP NHẬT GIAO DIỆN ADMIN
+    function loadAdminData() {
+        // Load list bài viết trong admin
+        const posts = JSON.parse(localStorage.getItem(STORAGE_KEY_POSTS) || '[]');
+        document.getElementById('admin-post-list').innerHTML = posts.map(p => 
+            `<div style="border-bottom:1px solid #eee; padding:5px;">
+                <b>${p.title}</b> <button class="btn-delete" onclick="deletePost(${p.id})">Xóa</button>
+            </div>`
+        ).join('');
+
+        // Load list nhân sự trong admin
+        const team = JSON.parse(localStorage.getItem(STORAGE_KEY_TEAM) || '[]');
+        document.getElementById('admin-team-list').innerHTML = team.map(t => 
+            `<div style="border-bottom:1px solid #eee; padding:5px;">
+                <b>${t.name}</b> (${t.role}) <button class="btn-delete" onclick="deleteMember(${t.id})">Xóa</button>
+            </div>`
+        ).join('');
+    }
+
+    // Chạy khi tải trang để hiển thị dữ liệu đã lưu
+    window.addEventListener('load', () => {
+        renderPublicPosts();
+        renderPublicTeam();
+    });
+
+</script>
+<script>
+
+    // ================= CẤU HÌNH DATABASE (JSONBIN) =================
+
+    // Thay mã của bạn vào 2 dòng dưới đây:
+
+    const BIN_ID = '$2a$10$l1E3f1p.9DeJ0c01VdtqBuznPzCNhE.r5OEcZ1JmgPWRWoNTnyAoi'; 
+
+    const API_KEY = 'H69840cc643b1c97be9667483; 
+
+    // ===============================================================
+
+
+
+    const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+
+
+
+    // Chèn khu vực tin tức vào giao diện
+
+    const newsSectionHTML = `
+
+        <section id="dynamic-news-section" style="padding: 40px 0; background: #f9f9f9;">
+
+            <div class="w-container">
+
+                <h1 class="heading-9" style="text-align:center; margin-bottom:30px;">TIN TỨC MỚI</h1>
+
+                <div id="public-news-list" class="news-grid">Loading data...</div>
+
+            </div>
+
+        </section>
+
+    `;
+
+    const targetSection = document.querySelector('.section-10');
+
+    if(targetSection) targetSection.insertAdjacentHTML('afterend', newsSectionHTML);
+
+
+
+    // --- CÁC HÀM XỬ LÝ API (CLOUD) ---
+
+
+
+    // 1. Lấy dữ liệu từ Cloud về
+
+    async function fetchData() {
+
+        try {
+
+            const res = await fetch(API_URL, {
+
+                headers: { 'X-Master-Key': API_KEY }
+
+            });
+
+            const data = await res.json();
+
+            return data.record; // Trả về object { posts: [], team: [] }
+
+        } catch (error) {
+
+            console.error("Lỗi lấy dữ liệu:", error);
+
+            alert("Lỗi kết nối database!");
+
+            return { posts: [], team: [] };
+
+        }
+
+    }
+
+
+
+    // 2. Ghi dữ liệu lên Cloud
+
+    async function updateData(newData) {
+
+        try {
+
+            await fetch(API_URL, {
+
+                method: 'PUT',
+
+                headers: {
+
+                    'Content-Type': 'application/json',
+
+                    'X-Master-Key': API_KEY
+
+                },
+
+                body: JSON.stringify(newData)
+
+            });
+
+            return true;
+
+        } catch (error) {
+
+            console.error("Lỗi lưu dữ liệu:", error);
+
+            alert("Không thể lưu lên server!");
+
+            return false;
+
+        }
+
+    }
+
+
+
+    // --- CHỨC NĂNG ADMIN ---
+
+
+
+    function openAdminLogin() {
+
+        let tk = prompt("Tài khoản:");
+
+        let mk = prompt("Mật khẩu:");
+
+        if (tk === 'admin' && mk === '1') {
+
+            document.getElementById('admin-panel').style.display = 'block';
+
+            loadAdminData(); // Tải danh sách để quản lý
+
+        } else {
+
+            alert("Sai thông tin!");
+
+        }
+
+    }
+
+
+
+    function switchTab(tabId) {
+
+        document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+
+        document.getElementById(tabId).style.display = 'block';
+
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+        event.target.classList.add('active');
+
+    }
+
+
+
+    // --- LOGIC BÀI VIẾT (POSTS) ---
+
+
+
+    async function savePost() {
+
+        const title = document.getElementById('post-title').value;
+
+        const content = document.getElementById('post-content').value;
+
+        if(!title) return alert("Thiếu tiêu đề!");
+
+
+
+        const btn = document.querySelector('.btn-save');
+
+        btn.innerText = "Đang lưu..."; btn.disabled = true;
+
+
+
+        // 1. Lấy dữ liệu cũ về
+
+        let currentData = await fetchData();
+
+        
+
+        // 2. Thêm bài mới
+
+        const newPost = {
+
+            id: Date.now(),
+
+            title: title,
+
+            content: content,
+
+            date: new Date().toLocaleDateString()
+
+        };
+
+        
+
+        if(!currentData.posts) currentData.posts = [];
+
+        currentData.posts.unshift(newPost);
+
+
+
+        // 3. Đẩy ngược lên Cloud
+
+        await updateData(currentData);
+
+
+
+        alert("Đã đăng bài thành công!");
+
+        document.getElementById('post-title').value = '';
+
+        document.getElementById('post-content').value = '';
+
+        btn.innerText = "Đăng Bài"; btn.disabled = false;
+
+
+
+        renderPublicPosts(currentData.posts);
+
+        loadAdminData();
+
+    }
+
+
+
+    async function deletePost(id) {
+
+        if(!confirm("Xóa bài này?")) return;
+
+        
+
+        let currentData = await fetchData();
+
+        currentData.posts = currentData.posts.filter(p => p.id != id);
+
+        
+
+        await updateData(currentData);
+
+        alert("Đã xóa!");
+
+        renderPublicPosts(currentData.posts);
+
+        loadAdminData();
+
+    }
+
+
+
+    // --- LOGIC NHÂN SỰ (TEAM) ---
+
+
+
+    async function saveTeamMember() {
+
+        const name = document.getElementById('team-name').value;
+
+        const role = document.getElementById('team-role').value;
+
+        const desc = document.getElementById('team-desc').value;
+
+        const fileInput = document.getElementById('team-img');
+
+        
+
+        if(!name) return alert("Nhập tên!");
+
+
+
+        const processSave = async (imgSrc) => {
+
+            const btn = document.querySelectorAll('.btn-save')[1];
+
+            btn.innerText = "Đang lưu..."; btn.disabled = true;
+
+
+
+            let currentData = await fetchData();
+
+            const newMember = { id: Date.now(), name, role, desc, img: imgSrc };
+
+            
+
+            if(!currentData.team) currentData.team = [];
+
+            currentData.team.push(newMember);
+
+
+
+            await updateData(currentData);
+
+            
+
+            alert("Đã thêm nhân sự!");
+
+            btn.innerText = "Lưu Nhân Sự"; btn.disabled = false;
+
+            renderPublicTeam(currentData.team);
+
+            loadAdminData();
+
+        };
+
+
+
+        if (fileInput.files && fileInput.files[0]) {
+
+            const reader = new FileReader();
+
+            reader.onload = function(e) { processSave(e.target.result); };
+
+            reader.readAsDataURL(fileInput.files[0]);
+
+        } else {
+
+            processSave("https://via.placeholder.com/150");
+
+        }
+
+    }
+
+
+
+    async function deleteMember(id) {
+
+        if(!confirm("Xóa thành viên này?")) return;
+
+        
+
+        let currentData = await fetchData();
+
+        currentData.team = currentData.team.filter(t => t.id != id);
+
+        
+
+        await updateData(currentData);
+
+        alert("Đã xóa!");
+
+        renderPublicTeam(currentData.team);
+
+        loadAdminData();
+
+    }
+
+
+
+    // --- HIỂN THỊ DỮ LIỆU RA MÀN HÌNH ---
+
+
+
+    function renderPublicPosts(posts) {
+
+        const container = document.getElementById('public-news-list');
+
+        if(!posts || posts.length === 0) {
+
+            container.innerHTML = "<p>Chưa có tin tức nào.</p>";
+
+            return;
+
+        }
+
+        container.innerHTML = posts.map(p => `
+
+            <div class="news-card">
+
+                <h3>${p.title}</h3>
+
+                <small>${p.date}</small>
+
+                <p style="margin-top:10px;">${p.content}</p>
+
+            </div>
+
+        `).join('');
+
+    }
+
+
+
+    function renderPublicTeam(team) {
+
+        const teamContainer = document.querySelector('.team-member-wrap .team-grid');
+
+        if(!teamContainer) return;
+
+        
+
+        // Xóa các thẻ cũ do JS tạo ra để render lại
+
+        document.querySelectorAll('.dynamic-team-card').forEach(c => c.remove());
+
+
+
+        if(team && team.length > 0) {
+
+            const html = team.map(m => `
+
+                <div class="card dynamic-team-card">
+
+                    <div class="author-avatar" style="border: 4px solid #f7a8b8;">
+
+                        <img src="${m.img}" style="width:100%; height:100%; object-fit:cover;">
+
+                    </div>
+
+                    <h1 class="name">${m.name}</h1>
+
+                    <div class="role">${m.role}</div>
+
+                    <div class="text-block-21">${m.desc}</div>
+
+                </div>
+
+            `).join('');
+
+            
+
+            // Chèn HTML mới vào cuối danh sách team
+
+            const tempDiv = document.createElement('div');
+
+            tempDiv.innerHTML = html;
+
+            while (tempDiv.firstChild) {
+
+                teamContainer.appendChild(tempDiv.firstChild);
+
+            }
+
+        }
+
+    }
+
+
+
+    async function loadAdminData() {
+
+        const data = await fetchData();
+
+        
+
+        document.getElementById('admin-post-list').innerHTML = (data.posts || []).map(p => 
+
+            `<div style="border-bottom:1px solid #eee; padding:5px; display:flex; justify-content:space-between;">
+
+                <span>${p.title}</span> 
+
+                <button class="btn-delete" onclick="deletePost(${p.id})">Xóa</button>
+
+            </div>`
+
+        ).join('');
+
+
+
+        document.getElementById('admin-team-list').innerHTML = (data.team || []).map(t => 
+
+            `<div style="border-bottom:1px solid #eee; padding:5px; display:flex; justify-content:space-between;">
+
+                <span>${t.name}</span> 
+
+                <button class="btn-delete" onclick="deleteMember(${t.id})">Xóa</button>
+
+            </div>`
+
+        ).join('');
+
+    }
+
+
+
+    // --- KHỞI CHẠY KHI MỞ TRANG ---
+
+    window.addEventListener('load', async () => {
+
+        const data = await fetchData();
+
+        renderPublicPosts(data.posts);
+
+        renderPublicTeam(data.team);
+
+    });
+
+</script>
 </body>
 </html> 
