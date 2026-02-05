@@ -776,570 +776,399 @@
 <div id="news-placeholder"></div>
 
 <script>
-    // 1. CẤU HÌNH & KHỞI TẠO
-    const STORAGE_KEY_POSTS = 'nanu_posts';
-    const STORAGE_KEY_TEAM = 'nanu_team';
+    // ================= 1. CẤU HÌNH HỆ THỐNG =================
+    const CONFIG = {
+        // ID và Key của bạn
+        binId: '69840cc643b1c97be9667483'.trim(),
+        apiKey: '$2a$10$l1E3f1p.9DeJ0c01VdtqBuznPzCNhE.r5OEcZ1JmgPWRWoNTnyAoi'.trim(),
+        // Tài khoản Admin
+        user: 'adminphuong',
+        pass: 'naunana123'
+    };
+    const API_URL = `https://api.jsonbin.io/v3/b/${CONFIG.binId}`;
 
-    // Chèn khu vực tin tức vào sau phần giới thiệu (Section 10)
-    const newsSectionHTML = `
-        <section id="dynamic-news-section">
-            <div class="w-container">
-                <h1 class="heading-9">TIN TỨC MỚI</h1>
-                <div id="public-news-list" class="news-grid"></div>
-            </div>
-        </section>
+    // ================= 2. GIAO DIỆN (UI) =================
+
+    // CSS cho Admin Panel
+    const styles = `
+        .admin-trigger { cursor: pointer; color: #d63384 !important; font-weight: bold; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 99999; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+        .modal-overlay.open { display: flex; }
+        .admin-box { background: white; width: 90%; max-width: 900px; max-height: 90vh; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        .admin-header { padding: 15px 20px; background: #333; color: white; display: flex; justify-content: space-between; align-items: center; }
+        .admin-body { display: flex; flex: 1; overflow: hidden; }
+        .admin-sidebar { width: 200px; background: #f4f4f4; padding: 20px 0; border-right: 1px solid #ddd; }
+        .sidebar-btn { display: block; width: 100%; padding: 12px 20px; text-align: left; background: none; border: none; cursor: pointer; font-weight: 600; color: #555; transition: 0.2s; }
+        .sidebar-btn:hover { background: #e0e0e0; }
+        .sidebar-btn.active { background: white; color: #d63384; border-left: 4px solid #d63384; }
+        .admin-content { flex: 1; padding: 30px; overflow-y: auto; background: #fff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s; }
+        .form-group { margin-bottom: 15px; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        .btn-submit { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-submit:hover { background: #218838; }
+        .list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .list-item img { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; margin-right: 10px; }
+        .btn-del { background: #ff4d4d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+        /* Responsive Mobile */
+        @media (max-width: 768px) { .admin-body { flex-direction: column; } .admin-sidebar { width: 100%; display: flex; overflow-x: auto; } }
     `;
-    // Chèn section tin tức vào sau section đầu tiên
-    document.querySelector('.section-10').insertAdjacentHTML('afterend', newsSectionHTML);
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = styles;
+    document.head.appendChild(styleSheet);
 
-    // 2. CHỨC NĂNG ĐĂNG NHẬP
-    function openAdminLogin() {
-        let tk = prompt("Nhập tài khoản:");
-        let mk = prompt("Nhập mật khẩu:");
-        
-        if (tk === 'admin' && mk === '1') {
-            alert("Đăng nhập thành công!");
-            document.getElementById('admin-panel').style.display = 'block';
-            loadAdminData();
-        } else {
-            alert("Sai thông tin đăng nhập!");
-        }
-    }
-
-    function switchTab(tabId) {
-        document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-        document.getElementById(tabId).style.display = 'block';
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        event.target.classList.add('active');
-    }
-
-    // 3. XỬ LÝ BÀI VIẾT (POSTS)
-    function savePost() {
-        const title = document.getElementById('post-title').value;
-        const content = document.getElementById('post-content').value;
-        if(!title) return alert("Vui lòng nhập tiêu đề");
-
-        const newPost = {
-            id: Date.now(),
-            title: title,
-            content: content,
-            date: new Date().toLocaleDateString()
-        };
-
-        let posts = JSON.parse(localStorage.getItem(STORAGE_KEY_POSTS) || '[]');
-        posts.unshift(newPost); // Thêm vào đầu
-        localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(posts));
-        
-        alert("Đã đăng bài!");
-        document.getElementById('post-title').value = '';
-        document.getElementById('post-content').value = '';
-        renderPublicPosts();
-        loadAdminData();
-    }
-
-    function deletePost(id) {
-        if(confirm("Xóa bài này?")) {
-            let posts = JSON.parse(localStorage.getItem(STORAGE_KEY_POSTS) || '[]');
-            posts = posts.filter(p => p.id != id);
-            localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(posts));
-            renderPublicPosts();
-            loadAdminData();
-        }
-    }
-
-    function renderPublicPosts() {
-        const container = document.getElementById('public-news-list');
-        const posts = JSON.parse(localStorage.getItem(STORAGE_KEY_POSTS) || '[]');
-        
-        if(posts.length === 0) {
-            document.getElementById('dynamic-news-section').style.display = 'none';
-        } else {
-            document.getElementById('dynamic-news-section').style.display = 'block';
-            container.innerHTML = posts.map(p => `
-                <div class="news-card">
-                    <h3>${p.title}</h3>
-                    <small>${p.date}</small>
-                    <p>${p.content}</p>
-                </div>
-            `).join('');
-        }
-    }
-
-    // 4. XỬ LÝ NHÂN SỰ (TEAM)
-    function saveTeamMember() {
-        const name = document.getElementById('team-name').value;
-        const role = document.getElementById('team-role').value;
-        const desc = document.getElementById('team-desc').value;
-        const fileInput = document.getElementById('team-img');
-        
-        if(!name) return alert("Cần nhập tên!");
-
-        // Hàm xử lý ảnh sang Base64 để lưu vào localStorage
-        if (fileInput.files && fileInput.files[0]) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const imgSrc = e.target.result;
-                addMemberToStorage(name, role, desc, imgSrc);
-            };
-            reader.readAsDataURL(fileInput.files[0]);
-        } else {
-            // Dùng ảnh mặc định nếu không upload
-            addMemberToStorage(name, role, desc, "https://via.placeholder.com/150");
-        }
-    }
-
-    function addMemberToStorage(name, role, desc, img) {
-        const newMember = { id: Date.now(), name, role, desc, img };
-        let team = JSON.parse(localStorage.getItem(STORAGE_KEY_TEAM) || '[]');
-        team.push(newMember);
-        localStorage.setItem(STORAGE_KEY_TEAM, JSON.stringify(team));
-        
-        alert("Đã thêm thành viên!");
-        renderPublicTeam();
-        loadAdminData();
-    }
-
-    function deleteMember(id) {
-        if(confirm("Xóa thành viên này?")) {
-            let team = JSON.parse(localStorage.getItem(STORAGE_KEY_TEAM) || '[]');
-            team = team.filter(t => t.id != id);
-            localStorage.setItem(STORAGE_KEY_TEAM, JSON.stringify(team));
-            renderPublicTeam();
-            loadAdminData();
-        }
-    }
-
-    function renderPublicTeam() {
-        // Tìm vùng hiển thị Team trong HTML gốc
-        const teamContainer = document.querySelector('.team-member-wrap .team-grid');
-        if(!teamContainer) return;
-
-        // Lấy dữ liệu mới
-        const team = JSON.parse(localStorage.getItem(STORAGE_KEY_TEAM) || '[]');
-        
-        // Giữ lại các thành viên cũ (hardcode trong HTML) hoặc xóa đi tùy bạn.
-        // Ở đây tôi sẽ giữ thẻ gốc và thêm thẻ mới vào sau.
-        
-        // Tạo HTML cho các thành viên mới thêm
-        const newMembersHTML = team.map(m => `
-            <div class="card" id="member-${m.id}">
-                <div class="author-avatar">
-                    <img src="${m.img}" loading="lazy" class="avatar-image" style="width:100%; height:100%; object-fit:cover;">
-                </div>
-                <h1 class="name">${m.name}</h1>
-                <div class="role">${m.role}</div>
-                <div class="text-block-21">${m.desc.replace(/\n/g, '<br>')}</div>
+    // HTML Admin Panel
+    const adminHTML = `
+        <div id="login-modal" class="modal-overlay">
+            <div style="background:white; padding:30px; border-radius:10px; width:300px; text-align:center;">
+                <h3 style="margin-top:0">Đăng nhập Admin</h3>
+                <input type="text" id="log-user" class="form-control" placeholder="Tài khoản" style="margin-bottom:10px;">
+                <input type="password" id="log-pass" class="form-control" placeholder="Mật khẩu" style="margin-bottom:10px;">
+                <button onclick="auth()" class="btn-submit">Vào Hệ Thống</button>
+                <div id="login-err" style="color:red; margin-top:10px; font-size:13px;"></div>
+                <div style="margin-top:15px; cursor:pointer; color:#888" onclick="closeModal('login-modal')">Đóng</div>
             </div>
-        `).join('');
+        </div>
 
-        // Cách đơn giản: Xóa các phần tử JS đã thêm trước đó để tránh trùng lặp
-        // (Lưu ý: Cách này chỉ append vào cuối danh sách hiện có)
-        // Trong thực tế, bạn nên có một container riêng cho "Dynamic Team"
-        
-        // Tìm các card cũ được thêm bằng JS và xóa đi để render lại
-        const oldDynamicCards = document.querySelectorAll('.dynamic-team-card');
-        oldDynamicCards.forEach(c => c.remove());
-
-        // Append HTML mới
-        if(team.length > 0) {
-             // Chèn thêm vào cuối grid
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = newMembersHTML;
-            while (tempDiv.firstChild) {
-                if(tempDiv.firstChild.classList) {
-                    tempDiv.firstChild.classList.add('dynamic-team-card'); // Đánh dấu để dễ quản lý
-                    teamContainer.appendChild(tempDiv.firstChild);
-                } else {
-                    tempDiv.removeChild(tempDiv.firstChild);
-                }
-            }
-        }
-    }
-
-    // 5. CẬP NHẬT GIAO DIỆN ADMIN
-    function loadAdminData() {
-        // Load list bài viết trong admin
-        const posts = JSON.parse(localStorage.getItem(STORAGE_KEY_POSTS) || '[]');
-        document.getElementById('admin-post-list').innerHTML = posts.map(p => 
-            `<div style="border-bottom:1px solid #eee; padding:5px;">
-                <b>${p.title}</b> <button class="btn-delete" onclick="deletePost(${p.id})">Xóa</button>
-            </div>`
-        ).join('');
-
-        // Load list nhân sự trong admin
-        const team = JSON.parse(localStorage.getItem(STORAGE_KEY_TEAM) || '[]');
-        document.getElementById('admin-team-list').innerHTML = team.map(t => 
-            `<div style="border-bottom:1px solid #eee; padding:5px;">
-                <b>${t.name}</b> (${t.role}) <button class="btn-delete" onclick="deleteMember(${t.id})">Xóa</button>
-            </div>`
-        ).join('');
-    }
-
-    // Chạy khi tải trang để hiển thị dữ liệu đã lưu
-    window.addEventListener('load', () => {
-        renderPublicPosts();
-        renderPublicTeam();
-    });
-
-</script>
-<script>
-    // ================= CẤU HÌNH DATABASE (ĐÃ ĐIỀN SẴN MÃ CỦA BẠN) =================
-    // Tôi đã thêm hàm .trim() để lỡ bạn có copy dư khoảng trắng cũng không sao
-    const BIN_ID = '69840cc643b1c97be9667483'.trim(); 
-    const API_KEY = '$2a$10$l1E3f1p.9DeJ0c01VdtqBuznPzCNhE.r5OEcZ1JmgPWRWoNTnyAoi'.trim(); 
-    // ==============================================================================
-
-    const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
-
-    // --- 1. CHÈN GIAO DIỆN ADMIN (NẾU CHƯA CÓ) ---
-    if (!document.getElementById('admin-login-btn')) {
-        const btn = document.createElement('button');
-        btn.id = 'admin-login-btn';
-        btn.innerHTML = '⚙️ Admin Login';
-        btn.onclick = openAdminLogin;
-        Object.assign(btn.style, {
-            position: 'fixed', bottom: '20px', right: '20px', zIndex: '9999',
-            background: '#222', color: '#fff', padding: '12px 20px',
-            borderRadius: '50px', cursor: 'pointer', border: '2px solid white',
-            boxShadow: '0 4px 10px rgba(0,0,0,0.3)', fontWeight: 'bold'
-        });
-        document.body.appendChild(btn);
-
-        const panel = document.createElement('div');
-        panel.id = 'admin-panel';
-        panel.innerHTML = `
-            <div class="admin-container">
-                <span class="close-admin" onclick="document.getElementById('admin-panel').style.display='none'">×</span>
-                <h2 style="color:#333">Quản trị Website</h2>
-                <div class="status-bar" id="db-status">Đang kiểm tra kết nối...</div>
-                
-                <div class="admin-tab">
-                    <button class="tab-btn active" onclick="switchTab('tab-posts')">Bài Viết</button>
-                    <button class="tab-btn" onclick="switchTab('tab-team')">Nhân Sự</button>
-                    <button class="tab-btn" style="background:#dc3545; color:white" onclick="resetDatabase()">♻️ Reset Lỗi</button>
+        <div id="admin-dashboard" class="modal-overlay">
+            <div class="admin-box">
+                <div class="admin-header">
+                    <span>QUẢN TRỊ NANU NANA</span>
+                    <span style="cursor:pointer" onclick="closeModal('admin-dashboard')">❌ Đóng</span>
                 </div>
+                <div class="admin-body">
+                    <div class="admin-sidebar">
+                        <button class="sidebar-btn active" onclick="tab('posts')">📰 Bài Viết</button>
+                        <button class="sidebar-btn" onclick="tab('team')">👥 Nhân Sự</button>
+                        <button class="sidebar-btn" onclick="tab('courses')">🎓 Khóa Học</button>
+                        <button class="sidebar-btn" onclick="resetData()" style="color:red; margin-top:20px;">♻️ Reset Lỗi</button>
+                    </div>
+                    <div class="admin-content">
+                        <div id="view-posts" class="tab-content active">
+                            <h3>Đăng Tin Tức Mới</h3>
+                            <input type="text" id="p-title" class="form-control" placeholder="Tiêu đề bài viết..." style="margin-bottom:10px">
+                            <textarea id="p-content" class="form-control" rows="4" placeholder="Nội dung..."></textarea>
+                            <button class="btn-submit" onclick="doSavePost()">Đăng Bài</button>
+                            <hr>
+                            <div id="list-posts">Đang tải...</div>
+                        </div>
 
-                <div id="tab-posts" class="tab-content">
-                    <h3>Đăng Tin Mới</h3>
-                    <div class="form-group"><input type="text" id="post-title" placeholder="Tiêu đề bài viết..."></div>
-                    <div class="form-group"><textarea id="post-content" rows="5" placeholder="Nội dung bài viết..."></textarea></div>
-                    <button class="btn-save" onclick="savePost()">Lưu Bài Viết</button>
-                    <hr><h4>Danh sách bài viết</h4>
-                    <div id="admin-post-list">Đang tải...</div>
-                </div>
+                        <div id="view-team" class="tab-content">
+                            <h3>Thêm Nhân Sự Mới</h3>
+                            <input type="text" id="t-name" class="form-control" placeholder="Tên nhân viên..." style="margin-bottom:10px">
+                            <input type="text" id="t-role" class="form-control" placeholder="Chức vụ (VD: Giáo viên)..." style="margin-bottom:10px">
+                            <textarea id="t-desc" class="form-control" rows="2" placeholder="Mô tả..." style="margin-bottom:10px"></textarea>
+                            <label>Ảnh đại diện:</label>
+                            <input type="file" id="t-img" class="form-control">
+                            <button class="btn-submit" onclick="doSaveTeam()">Lưu Nhân Sự</button>
+                            <hr>
+                            <div id="list-team">Đang tải...</div>
+                        </div>
 
-                <div id="tab-team" class="tab-content" style="display:none;">
-                    <h3>Thêm Nhân Sự</h3>
-                    <div class="form-group"><input type="text" id="team-name" placeholder="Tên nhân viên..."></div>
-                    <div class="form-group"><input type="text" id="team-role" placeholder="Chức vụ..."></div>
-                    <div class="form-group"><textarea id="team-desc" rows="3" placeholder="Mô tả..."></textarea></div>
-                    <div class="form-group"><input type="file" id="team-img" accept="image/*"></div>
-                    <button class="btn-save" onclick="saveTeamMember()">Lưu Nhân Sự</button>
-                    <hr><h4>Danh sách nhân sự</h4>
-                    <div id="admin-team-list">Đang tải...</div>
-                </div>
-            </div>
-        `;
-        Object.assign(panel.style, {
-            display: 'none', position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
-            background: 'rgba(0,0,0,0.85)', zIndex: '10000', overflowY: 'auto', backdropFilter: 'blur(5px)'
-        });
-        document.body.appendChild(panel);
-
-        const style = document.createElement('style');
-        style.innerHTML = `
-            .admin-container { background: #fff; max-width: 800px; margin: 50px auto; padding: 30px; border-radius: 12px; position: relative; font-family: sans-serif; }
-            .close-admin { position: absolute; top: 15px; right: 20px; font-size: 30px; cursor: pointer; color: #888; }
-            .admin-tab { margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom:10px; }
-            .tab-btn { padding: 10px 20px; border: none; background: #f0f0f0; cursor: pointer; margin-right: 10px; border-radius: 5px; font-weight:600; }
-            .tab-btn.active { background: #333; color: #fff; }
-            .form-group { margin-bottom: 15px; }
-            .form-group input, .form-group textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-            .btn-save { background: #28a745; color: white; padding: 12px 20px; border: none; cursor: pointer; width: 100%; border-radius: 6px; font-size:16px; font-weight:bold; transition: 0.3s; }
-            .btn-save:hover { background: #218838; }
-            .btn-delete { background: #ff4d4d; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; float:right; }
-            .item-row { padding: 10px; border-bottom: 1px solid #eee; display:flex; justify-content:space-between; align-items:center; }
-            .status-bar { padding: 10px; margin-bottom: 15px; border-radius: 5px; background: #e9ecef; font-size: 14px; }
-        `;
-        document.head.appendChild(style);
-    }
-
-    // Chèn khu vực tin tức công khai
-    if (!document.getElementById('dynamic-news-section')) {
-        const newsHTML = `
-            <section id="dynamic-news-section" style="padding: 60px 0; background: #f8f9fa;">
-                <div class="w-container">
-                    <h2 style="text-align:center; margin-bottom:40px; color:#333;">TIN TỨC HOẠT ĐỘNG</h2>
-                    <div id="public-news-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 30px;">
-                        <div style="text-align:center; grid-column: 1/-1;">Đang tải dữ liệu...</div>
+                        <div id="view-courses" class="tab-content">
+                            <h3>Thêm Khóa Học</h3>
+                            <input type="text" id="c-name" class="form-control" placeholder="Tên khóa học..." style="margin-bottom:10px">
+                            <input type="text" id="c-price" class="form-control" placeholder="Học phí / Thời gian..." style="margin-bottom:10px">
+                            <textarea id="c-desc" class="form-control" rows="3" placeholder="Mô tả chi tiết..." style="margin-bottom:10px"></textarea>
+                            <label>Ảnh bìa khóa học:</label>
+                            <input type="file" id="c-img" class="form-control">
+                            <button class="btn-submit" onclick="doSaveCourse()">Lưu Khóa Học</button>
+                            <hr>
+                            <div id="list-courses">Đang tải...</div>
+                        </div>
                     </div>
                 </div>
-            </section>
-        `;
-        const target = document.querySelector('.section-10');
-        if(target) target.insertAdjacentHTML('afterend', newsHTML);
-    }
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', adminHTML);
 
-    // --- 2. CÁC HÀM XỬ LÝ API (ĐÃ NÂNG CẤP) ---
-
-    // Hàm lấy dữ liệu (Có xử lý lỗi 404/Empty)
-    async function fetchData() {
-        const statusEl = document.getElementById('db-status');
-        if(statusEl) statusEl.innerHTML = "🔄 Đang kết nối server...";
-        
-        try {
-            const res = await fetch(API_URL, {
-                headers: { 'X-Master-Key': API_KEY }
-            });
-
-            if (res.status === 401 || res.status === 403) {
-                alert("LỖI: Sai Mã API Key! Kiểm tra lại mã Master Key.");
-                return null;
-            }
-            if (res.status === 404) {
-                alert("LỖI: Sai Bin ID! Không tìm thấy kho dữ liệu.");
-                return null;
-            }
-
-            const data = await res.json();
-            
-            // Tự động sửa nếu dữ liệu trống hoặc sai định dạng
-            if (!data.record || typeof data.record !== 'object') {
-                console.log("Dữ liệu trống, đang khởi tạo lại...");
-                return { posts: [], team: [] };
-            }
-
-            if(statusEl) statusEl.innerHTML = "✅ Kết nối ổn định";
-            return data.record;
-
-        } catch (error) {
-            console.error(error);
-            alert("Lỗi mạng hoặc lỗi server: " + error.message);
-            return null;
+    // Chèn nút Admin vào Menu
+    function injectMenu() {
+        const menu = document.querySelector('.navbar1_menu');
+        if(menu && !document.getElementById('btn-admin-nav')) {
+            const item = document.createElement('div');
+            item.id = 'btn-admin-nav';
+            item.className = 'navbar1_link w-inline-block admin-trigger';
+            item.innerHTML = `<div class="navbar_text">🔐 Admin</div>`;
+            item.onclick = () => document.getElementById('login-modal').classList.add('open');
+            menu.appendChild(item);
         }
     }
 
-    // Hàm lưu dữ liệu
-    async function updateData(newData) {
+    // Chèn Section hiển thị ra trang chủ
+    function injectSections() {
+        // 1. Chèn Tin Tức (Sau Banner)
+        if(!document.getElementById('dynamic-news')) {
+            const newsHTML = `
+                <section id="dynamic-news" style="padding:60px 0; background:#f8f9fa; border-top:1px solid #eee;">
+                    <div class="w-container">
+                        <h2 class="heading-9" style="text-align:center; color:#333; margin-bottom:40px;">TIN TỨC & SỰ KIỆN</h2>
+                        <div id="ui-posts" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:30px;">Loading...</div>
+                    </div>
+                </section>
+            `;
+            const banner = document.querySelector('.section-10');
+            if(banner) banner.insertAdjacentHTML('afterend', newsHTML);
+        }
+
+        // 2. Chèn Khóa Học (Sau Level)
+        if(!document.getElementById('dynamic-courses')) {
+            const courseHTML = `
+                <section id="dynamic-courses" style="padding:60px 0; background:#fff;">
+                    <div class="w-container">
+                        <h2 class="h2-dark" style="text-align:center; margin-bottom:40px;">CÁC KHÓA HỌC SẮP KHAI GIẢNG</h2>
+                        <div id="ui-courses" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:30px;">Loading...</div>
+                    </div>
+                </section>
+            `;
+            const levelSection = document.querySelector('.section-khoa-hoc-selection');
+            if(levelSection) levelSection.insertAdjacentHTML('afterend', courseHTML);
+        }
+    }
+
+    // ================= 3. LOGIC HỆ THỐNG (CORE) =================
+
+    // --- API ---
+    async function getDB() {
         try {
-            const res = await fetch(API_URL, {
+            const r = await fetch(API_URL, { headers: { 'X-Master-Key': CONFIG.apiKey } });
+            if(!r.ok) return { posts:[], team:[], courses:[] };
+            const d = await r.json();
+            // Init data nếu thiếu
+            const rec = d.record || {};
+            if(!Array.isArray(rec.posts)) rec.posts = [];
+            if(!Array.isArray(rec.team)) rec.team = [];
+            if(!Array.isArray(rec.courses)) rec.courses = [];
+            return rec;
+        } catch(e) { console.error(e); return { posts:[], team:[], courses:[] }; }
+    }
+
+    async function setDB(data) {
+        try {
+            await fetch(API_URL, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': API_KEY
-                },
-                body: JSON.stringify(newData)
+                headers: { 'Content-Type': 'application/json', 'X-Master-Key': CONFIG.apiKey },
+                body: JSON.stringify(data)
             });
-            
-            if (res.ok) return true;
-            throw new Error("Server trả về lỗi: " + res.status);
-        } catch (error) {
-            alert("Không thể lưu: " + error.message);
-            return false;
-        }
+            return true;
+        } catch(e) { alert("Lỗi lưu: "+e); return false; }
     }
 
-    // Hàm RESET CỨU HỘ (Dùng khi bị lỗi kẹt dữ liệu)
-    window.resetDatabase = async function() {
-        if(!confirm("CẢNH BÁO: Hành động này sẽ XÓA SẠCH dữ liệu cũ và tạo lại kho mới để sửa lỗi. Bạn có chắc không?")) return;
-        
-        const emptyData = { posts: [], team: [] };
-        const success = await updateData(emptyData);
-        if(success) {
-            alert("Đã reset kho dữ liệu thành công! Giờ bạn có thể thêm mới.");
-            loadAdminData();
-            renderPublicPosts([]);
-            renderPublicTeam([]);
-        }
-    }
-
-    // --- 3. CHỨC NĂNG ADMIN & LOGIC ---
-
-    function openAdminLogin() {
-        let tk = prompt("Tài khoản:");
-        let mk = prompt("Mật khẩu:");
-        if (tk === 'admin' && mk === '1') {
-            document.getElementById('admin-panel').style.display = 'block';
-            loadAdminData(); 
+    // --- Auth & Admin UI ---
+    window.closeModal = (id) => document.getElementById(id).classList.remove('open');
+    
+    window.auth = function() {
+        const u = document.getElementById('log-user').value;
+        const p = document.getElementById('log-pass').value;
+        if(u === CONFIG.user && p === CONFIG.pass) {
+            closeModal('login-modal');
+            document.getElementById('admin-dashboard').classList.add('open');
+            loadAdminList();
         } else {
-            alert("Sai thông tin!");
+            document.getElementById('login-err').innerText = "Sai thông tin đăng nhập!";
         }
     }
 
-    window.switchTab = function(tabId) {
-        document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-        document.getElementById(tabId).style.display = 'block';
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    window.tab = function(name) {
+        document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+        document.querySelectorAll('.sidebar-btn').forEach(e => e.classList.remove('active'));
+        document.getElementById('view-'+name).classList.add('active');
         event.target.classList.add('active');
     }
 
-    // --- LOGIC BÀI VIẾT ---
-    window.savePost = async function() {
-        const title = document.getElementById('post-title').value;
-        const content = document.getElementById('post-content').value;
-        if(!title) return alert("Vui lòng nhập tiêu đề!");
-
-        const btn = document.querySelector('.btn-save');
-        btn.innerHTML = "⏳ Đang lưu lên mây..."; btn.disabled = true;
-
-        let data = await fetchData();
-        if(!data) data = { posts: [], team: [] }; // Fallback nếu lỗi
-        if(!data.posts) data.posts = [];
-
-        data.posts.unshift({
-            id: Date.now(),
-            title: title,
-            content: content,
-            date: new Date().toLocaleDateString('vi-VN')
-        });
-
-        if(await updateData(data)) {
-            alert("Lưu thành công!");
-            document.getElementById('post-title').value = '';
-            document.getElementById('post-content').value = '';
-            renderPublicPosts(data.posts);
-            loadAdminData();
-        }
-        btn.innerHTML = "Lưu Bài Viết"; btn.disabled = false;
-    }
-
-    window.deletePost = async function(id) {
-        if(!confirm("Xóa bài này?")) return;
-        let data = await fetchData();
-        if(data && data.posts) {
-            data.posts = data.posts.filter(p => p.id != id);
-            await updateData(data);
-            renderPublicPosts(data.posts);
-            loadAdminData();
+    window.resetData = async function() {
+        if(confirm("Dữ liệu sẽ bị xóa sạch để sửa lỗi. Tiếp tục?")) {
+            await setDB({ posts:[], team:[], courses:[] });
+            alert("Đã reset!"); location.reload();
         }
     }
 
-    // --- LOGIC NHÂN SỰ ---
-    window.saveTeamMember = async function() {
-        const name = document.getElementById('team-name').value;
-        const role = document.getElementById('team-role').value;
-        const desc = document.getElementById('team-desc').value;
-        const fileInput = document.getElementById('team-img');
+    // ================= 4. CHỨC NĂNG LƯU (LOGIC TÁCH BIỆT) =================
+
+    // 1. Lưu Bài Viết
+    window.doSavePost = async function() {
+        const title = document.getElementById('p-title').value;
+        const content = document.getElementById('p-content').value;
+        if(!title) return alert("Nhập tiêu đề!");
+
+        const btn = event.target; btn.innerText = "⏳..."; btn.disabled = true;
         
-        if(!name) return alert("Vui lòng nhập tên!");
+        let db = await getDB();
+        db.posts.unshift({ id: Date.now(), title, content, date: new Date().toLocaleDateString('vi-VN') });
+        
+        await setDB(db);
+        alert("Đã đăng bài!");
+        document.getElementById('p-title').value = '';
+        document.getElementById('p-content').value = '';
+        btn.innerText = "Đăng Bài"; btn.disabled = false;
+        
+        loadAdminList(); refreshUI(db);
+    }
 
-        const btn = document.querySelectorAll('.btn-save')[1];
-        btn.innerHTML = "⏳ Đang xử lý ảnh & lưu..."; btn.disabled = true;
+    // 2. Lưu Nhân Sự (Có xử lý ảnh)
+    window.doSaveTeam = async function() {
+        const name = document.getElementById('t-name').value;
+        const role = document.getElementById('t-role').value;
+        const desc = document.getElementById('t-desc').value;
+        const file = document.getElementById('t-img').files[0];
+        if(!name) return alert("Nhập tên!");
 
-        const processSave = async (imgSrc) => {
-            let data = await fetchData();
-            if(!data) data = { posts: [], team: [] };
-            if(!data.team) data.team = [];
+        const btn = event.target; btn.innerText = "⏳..."; btn.disabled = true;
 
-            data.team.push({ id: Date.now(), name, role, desc, img: imgSrc });
-
-            if(await updateData(data)) {
-                alert("Đã thêm nhân sự!");
-                document.getElementById('team-name').value = '';
-                document.getElementById('team-desc').value = '';
-                renderPublicTeam(data.team);
-                loadAdminData();
-            }
-            btn.innerHTML = "Lưu Nhân Sự"; btn.disabled = false;
+        const process = async (img64) => {
+            let db = await getDB();
+            db.team.push({ id: Date.now(), name, role, desc, img: img64 });
+            await setDB(db);
+            
+            alert("Đã thêm nhân sự!");
+            // Reset form
+            document.getElementById('t-name').value = '';
+            document.getElementById('t-desc').value = '';
+            btn.innerText = "Lưu Nhân Sự"; btn.disabled = false;
+            
+            loadAdminList(); refreshUI(db);
         };
 
-        if (fileInput.files && fileInput.files[0]) {
+        if(file) {
             const reader = new FileReader();
-            reader.onload = function(e) { processSave(e.target.result); };
-            reader.readAsDataURL(fileInput.files[0]);
+            reader.onload = (e) => process(e.target.result);
+            reader.readAsDataURL(file);
         } else {
-            processSave("https://via.placeholder.com/150");
+            process('https://via.placeholder.com/150'); // Ảnh mặc định
         }
     }
 
-    window.deleteMember = async function(id) {
-        if(!confirm("Xóa thành viên này?")) return;
-        let data = await fetchData();
-        if(data && data.team) {
-            data.team = data.team.filter(t => t.id != id);
-            await updateData(data);
-            renderPublicTeam(data.team);
-            loadAdminData();
+    // 3. Lưu Khóa Học
+    window.doSaveCourse = async function() {
+        const name = document.getElementById('c-name').value;
+        const price = document.getElementById('c-price').value;
+        const desc = document.getElementById('c-desc').value;
+        const file = document.getElementById('c-img').files[0];
+        if(!name) return alert("Nhập tên khóa!");
+
+        const btn = event.target; btn.innerText = "⏳..."; btn.disabled = true;
+
+        const process = async (img64) => {
+            let db = await getDB();
+            db.courses.push({ id: Date.now(), name, price, desc, img: img64 });
+            await setDB(db);
+            alert("Đã thêm khóa học!");
+            document.getElementById('c-name').value = '';
+            document.getElementById('c-desc').value = '';
+            btn.innerText = "Lưu Khóa Học"; btn.disabled = false;
+            loadAdminList(); refreshUI(db);
+        };
+
+        if(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => process(e.target.result);
+            reader.readAsDataURL(file);
+        } else {
+            process('https://via.placeholder.com/300x200');
         }
     }
 
-    // --- HIỂN THỊ DỮ LIỆU ---
-    function renderPublicPosts(posts) {
-        const container = document.getElementById('public-news-list');
-        if(!container) return;
+    // Xóa chung
+    window.delItem = async function(type, id) {
+        if(!confirm("Xóa mục này?")) return;
+        let db = await getDB();
+        db[type] = db[type].filter(i => i.id !== id);
+        await setDB(db);
+        loadAdminList(); refreshUI(db);
+    }
+
+    // ================= 5. HIỂN THỊ RA MÀN HÌNH =================
+
+    async function loadAdminList() {
+        const db = await getDB();
         
-        if(!posts || posts.length === 0) {
-            container.innerHTML = `<div style="text-align:center; grid-column:1/-1; color:#888;">Chưa có tin tức nào.</div>`;
-            return;
-        }
-        container.innerHTML = posts.map(p => `
-            <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); transition:transform 0.2s;">
-                <h3 style="margin-top:0; color:#d63384; font-size:18px;">${p.title}</h3>
-                <small style="color:#999; font-style:italic;">📅 ${p.date}</small>
-                <p style="margin-top:15px; line-height:1.6; color:#555;">${p.content}</p>
-            </div>
-        `).join('');
+        // Render Post List Admin
+        document.getElementById('list-posts').innerHTML = db.posts.map(p => 
+            `<div class="list-item"><b>${p.title}</b> <button class="btn-del" onclick="delItem('posts', ${p.id})">Xóa</button></div>`
+        ).join('') || '<p>Trống</p>';
+
+        // Render Team List Admin
+        document.getElementById('list-team').innerHTML = db.team.map(t => 
+            `<div class="list-item">
+                <div style="display:flex;align-items:center"><img src="${t.img}"> <b>${t.name}</b></div>
+                <button class="btn-del" onclick="delItem('team', ${t.id})">Xóa</button>
+            </div>`
+        ).join('') || '<p>Trống</p>';
+
+        // Render Course List Admin
+        document.getElementById('list-courses').innerHTML = db.courses.map(c => 
+            `<div class="list-item">
+                <div style="display:flex;align-items:center"><img src="${c.img}"> <b>${c.name}</b></div>
+                <button class="btn-del" onclick="delItem('courses', ${c.id})">Xóa</button>
+            </div>`
+        ).join('') || '<p>Trống</p>';
     }
 
-    function renderPublicTeam(team) {
-        // Tìm vùng grid team trong HTML gốc của Webflow
-        const teamContainer = document.querySelector('.team-member-wrap .team-grid');
-        if(!teamContainer) return;
-        
-        // Xóa các thẻ cũ do JS tạo ra
-        document.querySelectorAll('.dynamic-team-card').forEach(c => c.remove());
+    function refreshUI(db) {
+        // 1. Render Posts
+        const postContainer = document.getElementById('ui-posts');
+        if(postContainer) {
+            if(db.posts.length === 0) postContainer.innerHTML = '<p style="text-align:center;width:100%;color:#999">Chưa có tin tức.</p>';
+            else postContainer.innerHTML = db.posts.map(p => `
+                <div style="background:white; padding:20px; border-radius:8px; box-shadow:0 5px 15px rgba(0,0,0,0.05);">
+                    <h3 style="color:#d63384; margin-top:0">${p.title}</h3>
+                    <small style="color:#888">${p.date}</small>
+                    <p style="margin-top:10px; color:#555">${p.content}</p>
+                </div>
+            `).join('');
+        }
 
-        if(team && team.length > 0) {
-            const html = team.map(m => `
-                <div class="card dynamic-team-card">
-                    <div class="author-avatar" style="border: 4px solid #f7a8b8; overflow:hidden; width:150px; height:150px; border-radius:50%; margin:0 auto 15px;">
-                        <img src="${m.img}" style="width:100%; height:100%; object-fit:cover;">
+        // 2. Render Courses
+        const courseContainer = document.getElementById('ui-courses');
+        if(courseContainer) {
+            if(db.courses.length === 0) courseContainer.innerHTML = '<p style="text-align:center;width:100%;color:#999">Chưa có khóa học mới.</p>';
+            else courseContainer.innerHTML = db.courses.map(c => `
+                <div style="background:white; border-radius:10px; overflow:hidden; box-shadow:0 5px 20px rgba(0,0,0,0.1);">
+                    <img src="${c.img}" style="width:100%; height:180px; object-fit:cover;">
+                    <div style="padding:20px;">
+                        <h3 style="margin:0 0 5px 0">${c.name}</h3>
+                        <div style="color:#d63384; font-weight:bold; margin-bottom:10px">${c.price || 'Liên hệ'}</div>
+                        <p style="font-size:14px; color:#666">${c.desc}</p>
                     </div>
-                    <h1 class="name" style="margin:10px 0;">${m.name}</h1>
-                    <div class="role" style="color:#d63384; font-weight:bold;">${m.role}</div>
-                    <div class="text-block-21" style="font-size:14px; margin-top:10px;">${m.desc}</div>
+                </div>
+            `).join('');
+        }
+
+        // 3. Render Team (Append vào lưới có sẵn)
+        const teamGrid = document.querySelector('.team-member-wrap .team-grid');
+        if(teamGrid) {
+            // Xóa các thẻ cũ do JS tạo ra (class js-team)
+            document.querySelectorAll('.js-team').forEach(e => e.remove());
+            
+            // Append thẻ mới
+            const html = db.team.map(t => `
+                <div class="card js-team">
+                    <div class="author-avatar" style="border:4px solid #f7a8b8;">
+                        <img src="${t.img}" style="width:100%; height:100%; object-fit:cover;">
+                    </div>
+                    <h1 class="name">${t.name}</h1>
+                    <div class="role">${t.role}</div>
+                    <div class="text-block-21">${t.desc}</div>
                 </div>
             `).join('');
             
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html;
-            while (tempDiv.firstChild) {
-                teamContainer.appendChild(tempDiv.firstChild);
-            }
+            // Chèn HTML
+            const div = document.createElement('div'); div.innerHTML = html;
+            while(div.firstChild) teamGrid.appendChild(div.firstChild);
         }
-    }
-
-    async function loadAdminData() {
-        const data = await fetchData();
-        if(!data) return;
-
-        const postList = document.getElementById('admin-post-list');
-        if((data.posts || []).length === 0) postList.innerHTML = "Chưa có bài nào.";
-        else postList.innerHTML = data.posts.map(p => 
-            `<div class="item-row">
-                <span style="font-weight:bold;">${p.title}</span> 
-                <button class="btn-delete" onclick="deletePost(${p.id})">Xóa</button>
-            </div>`
-        ).join('');
-
-        const teamList = document.getElementById('admin-team-list');
-        if((data.team || []).length === 0) teamList.innerHTML = "Chưa có nhân sự nào.";
-        else teamList.innerHTML = data.team.map(t => 
-            `<div class="item-row">
-                <span><b>${t.name}</b> - ${t.role}</span> 
-                <button class="btn-delete" onclick="deleteMember(${t.id})">Xóa</button>
-            </div>`
-        ).join('');
     }
 
     // --- KHỞI CHẠY ---
     window.addEventListener('load', async () => {
-        const data = await fetchData();
-        if(data) {
-            renderPublicPosts(data.posts);
-            renderPublicTeam(data.team);
-        }
+        injectMenu();
+        injectSections();
+        const db = await getDB();
+        refreshUI(db);
     });
+
 </script>
 </body>
 </html> 
